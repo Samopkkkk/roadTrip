@@ -60,6 +60,15 @@ class CostBreakdown(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
+class RouteLeg(BaseModel):
+    """One drivable hop between two consecutive stops."""
+
+    from_name: str | None = None
+    to_name: str | None = None
+    distance_meters: float = 0.0
+    duration_seconds: float = 0.0
+
+
 class PlanRequest(BaseModel):
     """A user's initial idea. Every field is optional except that *something*
     must be provided — a free-form idea, a destination, an attraction, or a
@@ -106,6 +115,7 @@ class PlanResponse(BaseModel):
     distance_meters: float
     expected_travel_time_seconds: float
     stops: list[PlanStop] = Field(default_factory=list)
+    legs: list[RouteLeg] = Field(default_factory=list)
     costs: CostBreakdown
     source: str = "heuristic"
     warnings: list[str] = Field(default_factory=list)

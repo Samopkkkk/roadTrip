@@ -71,6 +71,10 @@ def test_assemble_response_builds_valid_plan() -> None:
     assert plan.expected_travel_time_seconds > 0
     assert plan.costs.total_usd > 0
     assert plan.costs.lodging_usd > 0  # the lodging stop is counted
+    # One leg per hop: start -> 4 stops -> end = 5 named legs.
+    assert len(plan.legs) == 5
+    assert plan.legs[0].from_name == "Zzqx Junction"
+    assert plan.legs[-1].to_name == "Yosemite National Park"
 
 
 def test_assemble_response_clamps_and_orders_stops() -> None:

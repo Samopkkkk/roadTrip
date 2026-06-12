@@ -21,6 +21,11 @@ def test_origin_and_destination() -> None:
     assert plan.costs.total_usd > 0
     assert plan.stops
     assert "→" in plan.title
+    # Per-leg breakdown: origin -> destination is one named leg.
+    assert len(plan.legs) == 1
+    assert plan.legs[0].from_name.startswith("San Francisco")
+    assert plan.legs[0].to_name.startswith("Los Angeles")
+    assert plan.legs[0].distance_meters > 0
 
 
 def test_idea_parsing_from_to() -> None:

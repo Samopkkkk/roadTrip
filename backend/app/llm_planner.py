@@ -22,9 +22,10 @@ import os
 
 from pydantic import BaseModel, Field
 
-from .costs import estimate_costs, haversine_meters
+from .costs import estimate_costs
 from .geocode import geocode
 from .planner import plan_trip as heuristic_plan_trip
+from .routing import compute_route, named_legs
 from .schemas import (
     Coordinate,
     PlanRequest,
@@ -36,9 +37,6 @@ from .schemas import (
 _MODEL = "claude-opus-4-8"
 _MAX_TOKENS = 8000
 _TIMEOUT_SECONDS = 60.0
-
-_AVG_DRIVE_MPH = 55.0
-_METERS_PER_MILE = 1609.344
 
 
 # --- Schema Claude fills (kept lenient; we validate/clamp in assembly) -------
@@ -196,16 +194,14 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
             )
         )
 
-    # Route distance = sum of legs through start -> each stop -> end.
+    # Route through start -> each stop -> end (real roads via OSRM when enabled).
     waypoints = [start_coord, *(s.coord for s in stops), end_coord]
-    distance_meters = sum(
-        haversine_meters(a.lat, a.lng, b.lat, b.lng)
-        for a, b in zip(waypoints, waypoints[1:])
-    )
-    travel_seconds = (distance_meters / _METERS_PER_MILE) / _AVG_DRIVE_MPH * 3600.0
+    route = await compute_route(waypoints)
+    leg_names = [start_name, *(s.name for s in stops), end_name]
+    legs = named_legs(route, leg_names)
 
     costs = estimate_costs(
-        distance_meters=distance_meters,
+        distance_meters=route.distance_meters,
         days=req.days,
         party_size=req.party_size,
         stops=stops,
@@ -223,9 +219,10 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
         start_coord=start_coord,
         end_name=end_name,
         end_coord=end_coord,
-        distance_meters=round(distance_meters, 1),
-        expected_travel_time_seconds=round(travel_seconds, 0),
+        distance_meters=round(route.distance_meters, 1),
+        expected_travel_time_seconds=round(route.duration_seconds, 0),
         stops=stops,
+        legs=legs,
         costs=costs,
         source="llm",
         warnings=[],

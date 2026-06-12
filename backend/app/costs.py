@@ -17,8 +17,7 @@ _EARTH_RADIUS_M = 6_371_008.8  # IUGG mean radius
 _METERS_PER_MILE = 1609.344
 
 # --- cost model knobs -------------------------------------------------------
-# Great-circle distance under-counts real driving; bump it to approximate roads.
-_ROAD_DISTANCE_FACTOR = 1.25
+# ``distance_meters`` is true road distance (from routing.py — OSRM or estimate).
 _AVG_MPG = 27.0
 _GAS_USD_PER_GALLON = 3.50
 _LODGING_USD_PER_ROOM_NIGHT = 130.0
@@ -64,7 +63,7 @@ def estimate_costs(
     party_size = max(1, int(party_size))
     days = max(1, int(days))
 
-    road_meters = max(0.0, distance_meters) * _ROAD_DISTANCE_FACTOR
+    road_meters = max(0.0, distance_meters)
     miles = road_meters / _METERS_PER_MILE
     gallons = miles / _AVG_MPG
     fuel = gallons * _GAS_USD_PER_GALLON
@@ -84,8 +83,8 @@ def estimate_costs(
     per_person = total / party_size
 
     assumptions = [
-        f"Fuel: ~{miles:,.0f} road miles at {_AVG_MPG:.0f} mpg, ${_GAS_USD_PER_GALLON:.2f}/gal "
-        f"(one-way; great-circle x{_ROAD_DISTANCE_FACTOR}).",
+        f"Fuel: ~{miles:,.0f} road miles at {_AVG_MPG:.0f} mpg, "
+        f"${_GAS_USD_PER_GALLON:.2f}/gal (one-way).",
         f"Lodging: {lodging_nights} night(s) x {rooms} room(s) at "
         f"${_LODGING_USD_PER_ROOM_NIGHT:.0f}/room.",
         f"Food: {days} day(s) x {party_size} traveler(s) at "

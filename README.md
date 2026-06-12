@@ -20,7 +20,8 @@ work:
 backend/app/
   schemas.py     # Pydantic request/response contract (source of truth for shape)
   geocode.py     # place name -> coordinates (offline gazetteer + optional Nominatim)
-  costs.py       # haversine distance + transparent, itemised cost model
+  routing.py     # road distance + drive time + per-leg breakdown (estimate or OSRM)
+  costs.py       # transparent, itemised cost model (priced off road distance)
   planner.py     # heuristic planner: anchors -> stops -> costs (deterministic fallback)
   llm_planner.py # Claude-backed planner (real, named POIs) + heuristic fallback
   main.py        # FastAPI HTTP surface
@@ -62,7 +63,8 @@ curl -s localhost:8000/plan \
 - `GET /health` — liveness probe.
 - `POST /plan` — body is a `PlanRequest`; returns a `PlanResponse` with
   `title`, `summary`, `tags`, start/end coords, `distance_meters`,
-  `expected_travel_time_seconds`, `stops[]`, and an itemised `costs` breakdown
+  `expected_travel_time_seconds`, `stops[]`, a per-hop `legs[]` breakdown
+  (from/to names + distance + duration), and an itemised `costs` breakdown
   (fuel / lodging / food / activities + per-person, with the assumptions used).
 
 ## Test
@@ -72,13 +74,21 @@ pip install -r backend/requirements.txt
 pytest                # runs from repo root; see pytest.ini
 ```
 
-## Optional: live geocoding
+## Distance & drive time
 
-By default geocoding uses a built-in gazetteer of common road-trip anchors. To
-fall back to OpenStreetMap Nominatim for unknown places, set:
+`routing.py` turns the ordered stops into road distance, drive time, and a
+per-leg breakdown. By default it uses a deterministic estimate (great-circle ×
+a road-winding factor at an average speed) — instant and offline. Cost is then
+priced off that road distance in one place, so the factor isn't baked into the
+cost model.
+
+## Optional: live services
+
+Both live integrations are opt-in and degrade gracefully — failures fall back to
+the offline path, so the endpoint always returns a usable plan.
 
 ```bash
-export ROADTRIP_USE_NOMINATIM=1
+export ROADTRIP_USE_NOMINATIM=1            # geocode unknown places via OpenStreetMap
+export ROADTRIP_USE_OSRM=1                 # real road routing via the public OSRM server
+export ROADTRIP_OSRM_URL=http://host:5000  # ...or point at your own OSRM instance
 ```
-
-Failures degrade gracefully — the planner's own fallbacks take over.

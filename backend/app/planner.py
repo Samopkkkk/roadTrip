@@ -13,8 +13,9 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
-from .costs import estimate_costs, haversine_meters
+from .costs import estimate_costs
 from .geocode import geocode
+from .routing import compute_route, named_legs
 from .schemas import (
     Coordinate,
     CostBreakdown,
@@ -23,9 +24,6 @@ from .schemas import (
     PlanStop,
     StopKind,
 )
-
-_AVG_DRIVE_MPH = 55.0
-_METERS_PER_MILE = 1609.344
 
 
 async def plan_trip(req: PlanRequest) -> PlanResponse:
@@ -49,13 +47,10 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
     if destination_geo is None:
         destination_geo = _fallback_destination(origin_geo.coord, req)
 
-    distance_meters = haversine_meters(
-        origin_geo.coord.lat,
-        origin_geo.coord.lng,
-        destination_geo.coord.lat,
-        destination_geo.coord.lng,
-    )
-    expected_travel_seconds = (distance_meters / _METERS_PER_MILE) / _AVG_DRIVE_MPH * 3600.0
+    route = await compute_route([origin_geo.coord, destination_geo.coord])
+    distance_meters = route.distance_meters
+    expected_travel_seconds = route.duration_seconds
+    legs = named_legs(route, [origin_geo.name, destination_geo.name])
 
     stops = _build_stop_skeleton(
         req=req,
@@ -92,6 +87,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         distance_meters=round(distance_meters, 1),
         expected_travel_time_seconds=round(expected_travel_seconds, 0),
         stops=stops,
+        legs=legs,
         costs=costs,
         source="heuristic",
         warnings=warnings,
