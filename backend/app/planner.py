@@ -10,6 +10,7 @@ distance math, cost math, and schema shape.
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 from .costs import estimate_costs, haversine_meters
@@ -187,7 +188,7 @@ def _fallback_origin() -> "GeocodeResult":
 def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResult":
     from .geocode import GeocodeResult
 
-    dx, dy = _direction_offset(req.direction or req.idea)
+    dx, dy = _direction_offset(req.direction or req.idea, req.days, origin.lat)
     return GeocodeResult(
         name=(req.direction or "Open road").strip() or "Open road",
         coord=Coordinate(
@@ -197,19 +198,36 @@ def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResul
     )
 
 
-def _direction_offset(hint: str) -> tuple[float, float]:
+_DIRECTION_MILES_PER_DAY = 180.0  # far-point reach for an open-ended wander
+_MILES_PER_DEG_LAT = 69.0
+
+
+def _direction_offset(hint: str, days: int, origin_lat: float) -> tuple[float, float]:
+    """Project a far-point offset ``(d_lng, d_lat)`` in degrees for a wander.
+
+    The reach scales with trip length so "head west for 5 days" covers real
+    ground instead of a token 4-degree hop. Longitude degrees are widened toward
+    the poles (they're physically shorter there) so the resulting mileage is
+    honest regardless of the origin's latitude.
+    """
+
     h = hint.lower()
+    reach_miles = max(1, days) * _DIRECTION_MILES_PER_DAY
+    deg_lat = reach_miles / _MILES_PER_DEG_LAT
+    cos_lat = max(0.2, math.cos(math.radians(origin_lat)))
+    deg_lng = reach_miles / (_MILES_PER_DEG_LAT * cos_lat)
+
     dx = dy = 0.0
     if "north" in h:
-        dy += 4.0
+        dy += deg_lat
     if "south" in h:
-        dy -= 4.0
+        dy -= deg_lat
     if "east" in h:
-        dx += 4.0
+        dx += deg_lng
     if "west" in h:
-        dx -= 4.0
+        dx -= deg_lng
     if dx == 0.0 and dy == 0.0:
-        dx = 3.0  # arbitrary easterly drift
+        dx = deg_lng  # no compass word found: drift east
     return dx, dy
 
 

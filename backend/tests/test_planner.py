@@ -41,6 +41,15 @@ def test_direction_only_trip_projects_offset() -> None:
     assert "Wandering" in plan.tags
 
 
+def test_direction_reach_scales_with_days() -> None:
+    short = _plan(origin="Denver", direction="west", days=2)
+    long = _plan(origin="Denver", direction="west", days=6)
+    # A longer wander must cover meaningfully more ground than a short one.
+    assert long.distance_meters > short.distance_meters
+    # A 6-day "head west" should be a substantial trip, not a token hop.
+    assert long.distance_meters > 800_000  # > 800 km
+
+
 def test_single_day_trip_has_one_headline_stop() -> None:
     plan = _plan(destination="Yosemite", days=1)
     assert len(plan.stops) == 1
