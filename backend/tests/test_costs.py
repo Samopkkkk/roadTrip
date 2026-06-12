@@ -54,6 +54,15 @@ def test_single_day_trip_has_no_lodging() -> None:
     assert costs.lodging_usd == 0.0
 
 
+def test_round_trip_labels_assumption() -> None:
+    one = estimate_costs(distance_meters=100_000.0, days=2, party_size=2, stops=[])
+    rt = estimate_costs(
+        distance_meters=100_000.0, days=2, party_size=2, stops=[], round_trip=True
+    )
+    assert any("one-way" in a for a in one.assumptions)
+    assert any("round trip" in a for a in rt.assumptions)
+
+
 def test_per_person_scales_down_with_party_size() -> None:
     solo = estimate_costs(distance_meters=200_000.0, days=2, party_size=1, stops=[])
     duo = estimate_costs(distance_meters=200_000.0, days=2, party_size=2, stops=[])

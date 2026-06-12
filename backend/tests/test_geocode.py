@@ -36,6 +36,19 @@ def test_empty_returns_none() -> None:
     assert _geo("   ") is None
 
 
+def test_expanded_gazetteer_resolves_new_anchors() -> None:
+    for query, expected in [
+        ("Pittsburgh", "Pittsburgh"),
+        ("Big Bend", "Big Bend"),
+        ("Olympic National Park", "Olympic"),
+        ("Lisbon", "Lisbon"),
+        ("Mexico City", "Mexico City"),
+    ]:
+        res = _geo(query)
+        assert res is not None, query
+        assert expected in res.name
+
+
 def test_unknown_place_returns_none_without_network() -> None:
     # Nominatim disabled by default, so a made-up place resolves to nothing.
     assert _geo("Zzqxville Nowhere 99999") is None

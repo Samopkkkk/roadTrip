@@ -86,6 +86,9 @@ class PlanRequest(BaseModel):
     days: int = Field(default=3, ge=1, le=60)
     party_size: int = Field(default=2, ge=1, le=20)
     pace: Pace = Pace.balanced
+    round_trip: bool = Field(
+        default=False, description="Return to the origin at the end (doubles the drive)."
+    )
 
     @model_validator(mode="after")
     def _require_some_seed(self) -> "PlanRequest":

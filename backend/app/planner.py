@@ -63,10 +63,15 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
             origin_geo = _fallback_origin()
             warnings.append("No starting point given — using a placeholder location.")
 
-    route = await compute_route([origin_geo.coord, destination_geo.coord])
+    route_coords = [origin_geo.coord, destination_geo.coord]
+    route_names = [origin_geo.name, destination_geo.name]
+    if req.round_trip:
+        route_coords.append(origin_geo.coord)
+        route_names.append(origin_geo.name)
+    route = await compute_route(route_coords)
     distance_meters = route.distance_meters
     expected_travel_seconds = route.duration_seconds
-    legs = named_legs(route, [origin_geo.name, destination_geo.name])
+    legs = named_legs(route, route_names)
 
     stops = _build_stop_skeleton(
         req=req,
@@ -79,6 +84,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         days=req.days,
         party_size=req.party_size,
         stops=stops,
+        round_trip=req.round_trip,
     )
 
     title = _build_title(origin_geo.name, destination_geo.name, req, based_at)

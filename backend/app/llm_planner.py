@@ -196,8 +196,11 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
 
     # Route through start -> each stop -> end (real roads via OSRM when enabled).
     waypoints = [start_coord, *(s.coord for s in stops), end_coord]
-    route = await compute_route(waypoints)
     leg_names = [start_name, *(s.name for s in stops), end_name]
+    if req.round_trip:
+        waypoints.append(start_coord)
+        leg_names.append(start_name)
+    route = await compute_route(waypoints)
     legs = named_legs(route, leg_names)
 
     costs = estimate_costs(
@@ -205,6 +208,7 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
         days=req.days,
         party_size=req.party_size,
         stops=stops,
+        round_trip=req.round_trip,
     )
 
     summary = itin.summary.strip() or (

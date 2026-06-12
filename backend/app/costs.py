@@ -51,12 +51,15 @@ def estimate_costs(
     days: int,
     party_size: int,
     stops: Iterable[PlanStop],
+    round_trip: bool = False,
 ) -> CostBreakdown:
-    """Build an itemised, one-way cost estimate for a trip.
+    """Build an itemised cost estimate for a trip.
 
-    Lodging nights are taken from the itinerary's ``lodging`` stops when present
-    (the planner inserts one per overnight); otherwise we fall back to
-    ``days - 1`` nights. Rooms scale with party size.
+    ``distance_meters`` is the full road distance to be driven (the caller adds a
+    return leg for round trips), so fuel is computed straight off it. Lodging
+    nights come from the itinerary's ``lodging`` stops when present (the planner
+    inserts one per overnight); otherwise we fall back to ``days - 1`` nights.
+    Rooms scale with party size.
     """
 
     stops = list(stops)
@@ -84,7 +87,7 @@ def estimate_costs(
 
     assumptions = [
         f"Fuel: ~{miles:,.0f} road miles at {_AVG_MPG:.0f} mpg, "
-        f"${_GAS_USD_PER_GALLON:.2f}/gal (one-way).",
+        f"${_GAS_USD_PER_GALLON:.2f}/gal ({'round trip' if round_trip else 'one-way'}).",
         f"Lodging: {lodging_nights} night(s) x {rooms} room(s) at "
         f"${_LODGING_USD_PER_ROOM_NIGHT:.0f}/room.",
         f"Food: {days} day(s) x {party_size} traveler(s) at "

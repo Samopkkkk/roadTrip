@@ -102,6 +102,14 @@ def test_unknown_origin_produces_warning() -> None:
     assert any("Zzqxville" in w for w in plan.warnings)
 
 
+def test_round_trip_roughly_doubles_distance() -> None:
+    one = _plan(origin="San Francisco", destination="Los Angeles", days=2)
+    rt = _plan(origin="San Francisco", destination="Los Angeles", days=2, round_trip=True)
+    assert rt.distance_meters > 1.8 * one.distance_meters
+    assert any("round trip" in a for a in rt.costs.assumptions)
+    assert rt.legs[-1].to_name.startswith("San Francisco")  # returns home
+
+
 def test_response_serializes_to_json() -> None:
     plan = _plan(idea="weekend near Lake Tahoe", days=2)
     blob = plan.model_dump_json()
