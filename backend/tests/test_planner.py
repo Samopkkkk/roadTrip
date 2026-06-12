@@ -74,6 +74,29 @@ def test_packed_pace_adds_second_stops_and_tag() -> None:
     assert "Relaxed" in relaxed.tags
 
 
+def test_attraction_only_bases_at_destination() -> None:
+    plan = _plan(anchor_attraction="Yosemite", days=1)
+    assert plan.origin_assumed is True
+    assert plan.start_name == plan.end_name  # based at the destination
+    assert "Current location" not in plan.start_name
+    assert plan.distance_meters == 0.0  # no bogus cross-country leg
+    assert plan.costs.fuel_usd == 0.0
+    assert plan.title.startswith("Explore")
+
+
+def test_origin_given_is_not_assumed() -> None:
+    plan = _plan(origin="San Francisco", destination="Los Angeles", days=2)
+    assert plan.origin_assumed is False
+    assert plan.distance_meters > 0
+
+
+def test_direction_only_no_origin_uses_placeholder() -> None:
+    plan = _plan(direction="north", days=2)
+    assert plan.origin_assumed is True
+    assert "Current location" in plan.start_name
+    assert plan.distance_meters > 0
+
+
 def test_unknown_origin_produces_warning() -> None:
     plan = _plan(origin="Zzqxville Nowhere", destination="Denver", days=2)
     assert any("Zzqxville" in w for w in plan.warnings)

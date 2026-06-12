@@ -32,20 +32,36 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
 
     origin_geo = await geocode(origin_text) if origin_text else None
     if origin_geo is None and origin_text:
-        warnings.append(f"Couldn't locate origin '{origin_text}', using fallback.")
-    if origin_geo is None:
-        origin_geo = _fallback_origin()
+        warnings.append(f"Couldn't locate origin '{origin_text}'.")
 
-    destination_geo = (
-        await geocode(destination_text) if destination_text else None
-    )
+    destination_geo = await geocode(destination_text) if destination_text else None
+    destination_resolved = destination_geo is not None
     if destination_geo is None and destination_text:
         warnings.append(
             f"Couldn't locate destination '{destination_text}', "
             "using direction hint instead."
         )
     if destination_geo is None:
-        destination_geo = _fallback_destination(origin_geo.coord, req)
+        provisional = origin_geo.coord if origin_geo else _fallback_origin().coord
+        destination_geo = _fallback_destination(provisional, req)
+
+    # Decide the origin. If the user never gave a start (and isn't just wandering
+    # a direction), base the trip at the destination instead of the geographic
+    # centre of the map — the app supplies the traveler's real location to route
+    # there. This avoids absurd "1,800 km from Current location" estimates.
+    origin_assumed = origin_geo is None
+    based_at = False
+    if origin_geo is None:
+        if req.direction is None and destination_resolved:
+            origin_geo = _based_at(destination_geo)
+            based_at = True
+            warnings.append(
+                f"No starting point given — planning around {destination_geo.name}. "
+                "Add your origin to include the drive there."
+            )
+        else:
+            origin_geo = _fallback_origin()
+            warnings.append("No starting point given — using a placeholder location.")
 
     route = await compute_route([origin_geo.coord, destination_geo.coord])
     distance_meters = route.distance_meters
@@ -65,7 +81,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         stops=stops,
     )
 
-    title = _build_title(origin_geo.name, destination_geo.name, req)
+    title = _build_title(origin_geo.name, destination_geo.name, req, based_at)
     summary = _build_summary(
         req=req,
         origin=origin_geo.name,
@@ -73,6 +89,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         distance_meters=distance_meters,
         stops=stops,
         costs=costs,
+        based_at=based_at,
     )
     tags = _build_tags(req)
 
@@ -90,6 +107,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         legs=legs,
         costs=costs,
         source="heuristic",
+        origin_assumed=origin_assumed,
         warnings=warnings,
     )
 
@@ -179,6 +197,14 @@ def _fallback_origin() -> "GeocodeResult":
         name="Current location",
         coord=Coordinate(lat=39.5, lng=-98.35),
     )
+
+
+def _based_at(destination: "GeocodeResult") -> "GeocodeResult":
+    """Start the trip at the destination — used when no origin was provided."""
+
+    from .geocode import GeocodeResult
+
+    return GeocodeResult(name=destination.name, coord=destination.coord)
 
 
 def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResult":
@@ -310,7 +336,11 @@ def _build_stop_skeleton(
     return stops
 
 
-def _build_title(origin_name: str, destination_name: str, req: PlanRequest) -> str:
+def _build_title(
+    origin_name: str, destination_name: str, req: PlanRequest, based_at: bool = False
+) -> str:
+    if based_at:
+        return f"Explore {destination_name}"
     if req.destination or req.anchor_attraction:
         return f"{origin_name} → {destination_name}"
     if req.direction:
@@ -326,9 +356,16 @@ def _build_summary(
     distance_meters: float,
     stops: Iterable[PlanStop],
     costs: CostBreakdown,
+    based_at: bool = False,
 ) -> str:
-    km = distance_meters / 1000
     stop_count = sum(1 for _ in stops)
+    if based_at:
+        return (
+            f"A {req.days}-day trip exploring {destination} with {stop_count} "
+            f"suggested stops. Estimated total: ${costs.total_usd:,.0f} for "
+            f"{req.party_size} traveler(s) (excludes the drive to get there)."
+        )
+    km = distance_meters / 1000
     return (
         f"A {req.days}-day, ~{km:,.0f} km trip from {origin} to {destination} "
         f"with {stop_count} suggested stops. "

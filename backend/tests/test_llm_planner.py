@@ -60,7 +60,7 @@ def test_coerce_kind_maps_unknown_to_attraction() -> None:
 
 
 def test_assemble_response_builds_valid_plan() -> None:
-    req = PlanRequest(idea="SF to Yosemite", days=2, party_size=2)
+    req = PlanRequest(idea="Drive from San Francisco to Yosemite", days=2, party_size=2)
     plan = asyncio.run(_assemble_response(req, _sample_itinerary()))
 
     assert plan.source == "llm"
@@ -75,6 +75,14 @@ def test_assemble_response_builds_valid_plan() -> None:
     assert len(plan.legs) == 5
     assert plan.legs[0].from_name == "Zzqx Junction"
     assert plan.legs[-1].to_name == "Yosemite National Park"
+    # "from San Francisco" names a start, so origin is not assumed.
+    assert plan.origin_assumed is False
+
+
+def test_assemble_marks_origin_assumed_without_start() -> None:
+    req = PlanRequest(anchor_attraction="Yosemite", days=2)
+    plan = asyncio.run(_assemble_response(req, _sample_itinerary()))
+    assert plan.origin_assumed is True
 
 
 def test_assemble_response_clamps_and_orders_stops() -> None:

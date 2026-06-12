@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 
 from .costs import estimate_costs
 from .geocode import geocode
-from .planner import plan_trip as heuristic_plan_trip
+from .planner import _extract_endpoints_from_idea, plan_trip as heuristic_plan_trip
 from .routing import compute_route, named_legs
 from .schemas import (
     Coordinate,
@@ -211,6 +211,10 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
         f"A {req.days}-day trip from {start_name} to {end_name} with {len(stops)} stops."
     )
 
+    # True when the traveler never pinned a start (neither a field nor in the idea).
+    parsed_origin, _ = _extract_endpoints_from_idea(req.idea)
+    origin_assumed = req.origin is None and parsed_origin is None
+
     return PlanResponse(
         title=itin.title.strip() or f"{start_name} → {end_name}",
         summary=summary,
@@ -225,6 +229,7 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
         legs=legs,
         costs=costs,
         source="llm",
+        origin_assumed=origin_assumed,
         warnings=[],
     )
 

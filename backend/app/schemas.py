@@ -118,4 +118,9 @@ class PlanResponse(BaseModel):
     legs: list[RouteLeg] = Field(default_factory=list)
     costs: CostBreakdown
     source: str = "heuristic"
+    origin_assumed: bool = Field(
+        default=False,
+        description="True when no start was given and one was assumed; the app "
+        "should supply the traveler's location and re-plan.",
+    )
     warnings: list[str] = Field(default_factory=list)

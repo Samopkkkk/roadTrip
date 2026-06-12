@@ -64,8 +64,19 @@ curl -s localhost:8000/plan \
 - `POST /plan` — body is a `PlanRequest`; returns a `PlanResponse` with
   `title`, `summary`, `tags`, start/end coords, `distance_meters`,
   `expected_travel_time_seconds`, `stops[]`, a per-hop `legs[]` breakdown
-  (from/to names + distance + duration), and an itemised `costs` breakdown
-  (fuel / lodging / food / activities + per-person, with the assumptions used).
+  (from/to names + distance + duration), an itemised `costs` breakdown
+  (fuel / lodging / food / activities + per-person, with the assumptions used),
+  and `origin_assumed` (see below).
+
+### No starting point?
+
+If the traveler gives only a destination, attraction, or idea (no origin), the
+plan is built **around the destination** rather than from the geographic centre
+of the map — so a "see Yosemite" request returns *Explore Yosemite* with no
+bogus cross-country drive, not a 1,800 km estimate from nowhere. The response
+sets `origin_assumed: true`; the app should supply the traveler's real location
+and re-plan to add the drive there. (A bare `direction` with no origin still
+uses a placeholder location, also flagged.)
 
 ## Test
 
