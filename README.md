@@ -18,17 +18,29 @@ work:
 
 ```
 backend/app/
-  schemas.py   # Pydantic request/response contract (source of truth for shape)
-  geocode.py   # place name -> coordinates (offline gazetteer + optional Nominatim)
-  costs.py     # haversine distance + transparent, itemised cost model
-  planner.py   # heuristic planner: anchors -> stops -> costs (LLM-backed planner TBD)
-  main.py      # FastAPI HTTP surface
+  schemas.py     # Pydantic request/response contract (source of truth for shape)
+  geocode.py     # place name -> coordinates (offline gazetteer + optional Nominatim)
+  costs.py       # haversine distance + transparent, itemised cost model
+  planner.py     # heuristic planner: anchors -> stops -> costs (deterministic fallback)
+  llm_planner.py # Claude-backed planner (real, named POIs) + heuristic fallback
+  main.py        # FastAPI HTTP surface
 ```
 
-The default planner is **deterministic and offline** — no API keys, no surprise
-network calls, instant on first launch. A richer LLM-backed planner is on the
-roadmap; this heuristic stays the source of truth for distance/cost math and the
-response schema.
+Two planners, one contract:
+
+- **LLM planner** (`llm_planner.py`) — when `ANTHROPIC_API_KEY` is set, Claude
+  proposes a richer itinerary of real, named points of interest with coordinates.
+  The model only picks the *stops*; distance and cost are still computed by the
+  deterministic math in `costs.py`, so dollars never come from a hallucination.
+- **Heuristic planner** (`planner.py`) — the offline, deterministic fallback. No
+  API key, no surprise network calls, instant on first launch. Used automatically
+  whenever the LLM path is unavailable (no key, network error, or bad output).
+
+`POST /plan` goes through the LLM planner's dispatcher, which falls back to the
+heuristic (and notes it in `warnings`) on any failure — the endpoint always
+returns a usable, costed plan. Set `ROADTRIP_DISABLE_LLM=1` to force the
+heuristic even when a key is present. The `source` field on the response says
+which planner produced it (`"llm"` or `"heuristic"`).
 
 ## Run it
 

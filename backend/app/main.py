@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from .planner import plan_trip
+from .llm_planner import plan_trip
 from .schemas import PlanRequest, PlanResponse
 
 app = FastAPI(
