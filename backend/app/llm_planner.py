@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from .costs import estimate_costs
 from .geocode import geocode
 from .planner import _extract_endpoints_from_idea, plan_trip as heuristic_plan_trip
-from .routing import compute_route, named_legs
+from .routing import plan_route
 from .schemas import (
     Coordinate,
     PlanRequest,
@@ -195,13 +195,12 @@ async def _assemble_response(req: PlanRequest, itin: _LLMItinerary) -> PlanRespo
         )
 
     # Route through start -> each stop -> end (real roads via OSRM when enabled).
-    waypoints = [start_coord, *(s.coord for s in stops), end_coord]
-    leg_names = [start_name, *(s.name for s in stops), end_name]
-    if req.round_trip:
-        waypoints.append(start_coord)
-        leg_names.append(start_name)
-    route = await compute_route(waypoints)
-    legs = named_legs(route, leg_names)
+    endpoints = [
+        (start_name, start_coord),
+        *((s.name, s.coord) for s in stops),
+        (end_name, end_coord),
+    ]
+    route, legs = await plan_route(endpoints, round_trip=req.round_trip)
 
     costs = estimate_costs(
         distance_meters=route.distance_meters,

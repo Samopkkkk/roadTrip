@@ -15,7 +15,7 @@ from typing import Iterable
 
 from .costs import estimate_costs
 from .geocode import geocode
-from .routing import compute_route, named_legs
+from .routing import plan_route
 from .schemas import (
     Coordinate,
     CostBreakdown,
@@ -45,33 +45,42 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         provisional = origin_geo.coord if origin_geo else _fallback_origin().coord
         destination_geo = _fallback_destination(provisional, req)
 
-    # Decide the origin. If the user never gave a start (and isn't just wandering
-    # a direction), base the trip at the destination instead of the geographic
-    # centre of the map — the app supplies the traveler's real location to route
-    # there. This avoids absurd "1,800 km from Current location" estimates.
-    origin_assumed = origin_geo is None
+    # `origin_assumed` is a request-level fact: did the traveler pin a start at
+    # all? It's True only when neither a field nor the idea named one (so it
+    # matches the LLM planner, which derives the same thing). A *given-but-
+    # unlocatable* origin is NOT assumed — the user told us where they start.
+    origin_assumed = origin_text is None
+
+    # When we have no origin coordinates (none given, or geocoding failed) and
+    # the trip isn't just wandering a direction, base it at the destination
+    # instead of the geographic centre of the map — the app supplies the real
+    # location to route there. Avoids absurd "1,800 km from Current location".
     based_at = False
     if origin_geo is None:
         if req.direction is None and destination_resolved:
-            origin_geo = _based_at(destination_geo)
+            origin_geo = destination_geo  # frozen + immutable, safe to share
             based_at = True
-            warnings.append(
-                f"No starting point given — planning around {destination_geo.name}. "
-                "Add your origin to include the drive there."
-            )
+            if origin_text is None:
+                warnings.append(
+                    f"No starting point given — planning around {destination_geo.name}. "
+                    "Add your origin to include the drive there."
+                )
+            else:
+                warnings.append(
+                    f"Planning around {destination_geo.name} — provide a locatable "
+                    "origin to include the drive there."
+                )
         else:
             origin_geo = _fallback_origin()
-            warnings.append("No starting point given — using a placeholder location.")
+            if origin_text is None:
+                warnings.append("No starting point given — using a placeholder location.")
 
-    route_coords = [origin_geo.coord, destination_geo.coord]
-    route_names = [origin_geo.name, destination_geo.name]
-    if req.round_trip:
-        route_coords.append(origin_geo.coord)
-        route_names.append(origin_geo.name)
-    route = await compute_route(route_coords)
+    route, legs = await plan_route(
+        [(origin_geo.name, origin_geo.coord), (destination_geo.name, destination_geo.coord)],
+        round_trip=req.round_trip,
+    )
     distance_meters = route.distance_meters
     expected_travel_seconds = route.duration_seconds
-    legs = named_legs(route, route_names)
 
     stops = _build_stop_skeleton(
         req=req,
@@ -203,14 +212,6 @@ def _fallback_origin() -> "GeocodeResult":
         name="Current location",
         coord=Coordinate(lat=39.5, lng=-98.35),
     )
-
-
-def _based_at(destination: "GeocodeResult") -> "GeocodeResult":
-    """Start the trip at the destination — used when no origin was provided."""
-
-    from .geocode import GeocodeResult
-
-    return GeocodeResult(name=destination.name, coord=destination.coord)
 
 
 def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResult":

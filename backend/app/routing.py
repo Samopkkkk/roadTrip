@@ -21,11 +21,10 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from .costs import haversine_meters
+from .costs import _METERS_PER_MILE, haversine_meters
 from .schemas import Coordinate, RouteLeg
 
 _AVG_DRIVE_MPH = 55.0
-_METERS_PER_MILE = 1609.344
 # Great-circle under-counts real driving; scale it up for the offline estimate.
 _ROAD_DISTANCE_FACTOR = 1.25
 _OSRM_TIMEOUT_SECONDS = 8.0
@@ -141,3 +140,21 @@ def named_legs(result: RouteResult, names: list[str]) -> list[RouteLeg]:
         )
         for i, leg in enumerate(result.legs)
     ]
+
+
+async def plan_route(
+    endpoints: list[tuple[str, Coordinate]], *, round_trip: bool = False
+) -> tuple[RouteResult, list[RouteLeg]]:
+    """Route through named ``(name, coord)`` endpoints in order, returning the
+    route and its named legs. For a round trip, the origin is appended as the
+    final stop. This is the one place the return-leg and leg-naming rules live,
+    so the heuristic and LLM planners can't drift apart.
+    """
+
+    names = [name for name, _ in endpoints]
+    coords = [coord for _, coord in endpoints]
+    if round_trip and coords:
+        names.append(names[0])
+        coords.append(coords[0])
+    result = await compute_route(coords)
+    return result, named_legs(result, names)

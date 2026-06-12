@@ -102,6 +102,14 @@ def test_unknown_origin_produces_warning() -> None:
     assert any("Zzqxville" in w for w in plan.warnings)
 
 
+def test_unlocatable_origin_is_not_assumed() -> None:
+    # Regression: a user-supplied-but-unlocatable origin is NOT "assumed" — the
+    # user told us where they start — and we must not emit contradictory warnings.
+    plan = _plan(origin="Zzqxville Nowhere", destination="Denver", days=2)
+    assert plan.origin_assumed is False
+    assert not any("No starting point given" in w for w in plan.warnings)
+
+
 def test_round_trip_roughly_doubles_distance() -> None:
     one = _plan(origin="San Francisco", destination="Los Angeles", days=2)
     rt = _plan(origin="San Francisco", destination="Los Angeles", days=2, round_trip=True)

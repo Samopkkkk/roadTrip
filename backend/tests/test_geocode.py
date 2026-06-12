@@ -49,6 +49,15 @@ def test_expanded_gazetteer_resolves_new_anchors() -> None:
         assert expected in res.name
 
 
+def test_partial_match_is_word_bounded_not_substring() -> None:
+    # Regression: a short query must NOT match a longer key it's a substring of.
+    assert _geo("Bend") is None  # not "Horseshoe Bend"
+    assert _geo("Mesa") is None  # not "Mesa Verde National Park"
+    assert _geo("Fresno") is None  # not "Reno" ("reno" is a substring of "fresno")
+    # A known place named as whole words inside a longer query still resolves.
+    assert "San Francisco" in _geo("San Francisco Bay Area").name
+
+
 def test_unknown_place_returns_none_without_network() -> None:
     # Nominatim disabled by default, so a made-up place resolves to nothing.
     assert _geo("Zzqxville Nowhere 99999") is None

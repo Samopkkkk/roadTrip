@@ -187,8 +187,6 @@ _KEYS_BY_LENGTH: tuple[str, ...] = tuple(
     sorted(_GAZETTEER_BY_KEY, key=len, reverse=True)
 )
 
-_MIN_PARTIAL_KEY_LEN = 4
-
 
 def _normalize(text: str) -> str:
     """Lowercase, drop a trailing region qualifier, and strip punctuation."""
@@ -210,14 +208,18 @@ def _lookup_local(text: str) -> GeocodeResult | None:
         display, lat, lng = hit
         return GeocodeResult(name=display, coord=Coordinate(lat=lat, lng=lng))
 
-    # Partial match: a known place appears inside the query (e.g. "yosemite
-    # national park") or the query is a fragment of a known place.
+    # Partial match: a known place name appears as a run of whole words inside
+    # the query (e.g. "yosemite national park" -> "yosemite"). Matching on word
+    # boundaries — not raw substrings — avoids mislocating "Bend" to "Horseshoe
+    # Bend" or "Fresno" to "Reno". Longest keys are tried first.
+    query_words = norm.split()
     for key in _KEYS_BY_LENGTH:
-        if len(key) < _MIN_PARTIAL_KEY_LEN:
-            continue
-        if key in norm or norm in key:
-            display, lat, lng = _GAZETTEER_BY_KEY[key]
-            return GeocodeResult(name=display, coord=Coordinate(lat=lat, lng=lng))
+        key_words = key.split()
+        span = len(key_words)
+        for i in range(len(query_words) - span + 1):
+            if query_words[i : i + span] == key_words:
+                display, lat, lng = _GAZETTEER_BY_KEY[key]
+                return GeocodeResult(name=display, coord=Coordinate(lat=lat, lng=lng))
     return None
 
 
