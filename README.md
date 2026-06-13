@@ -27,6 +27,10 @@ backend/app/
   main.py        # FastAPI HTTP surface
 ```
 
+The **iOS & macOS app** (SwiftUI, multiplatform) lives in [`apple/`](apple/) —
+a native client for `POST /plan` with a map, day-by-day itinerary, and cost
+breakdown. See [`apple/README.md`](apple/README.md) to build it in Xcode.
+
 Two planners, one contract:
 
 - **LLM planner** (`llm_planner.py`) — when `ANTHROPIC_API_KEY` is set, Claude
