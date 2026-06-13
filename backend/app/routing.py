@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from .config import env_float
 from .costs import _METERS_PER_MILE, haversine_meters
 from .schemas import Coordinate, RouteLeg
 
@@ -39,20 +40,22 @@ class RouteResult:
     source: str = "estimate"  # "osrm" or "estimate"
 
 
-def _seconds_for(road_meters: float) -> float:
-    return (road_meters / _METERS_PER_MILE) / _AVG_DRIVE_MPH * 3600.0
+def _seconds_for(road_meters: float, mph: float) -> float:
+    return (road_meters / _METERS_PER_MILE) / mph * 3600.0
 
 
 def estimate_route(waypoints: list[Coordinate]) -> RouteResult:
     """Offline, deterministic route estimate (great-circle x road factor)."""
 
+    mph = env_float("ROADTRIP_AVG_DRIVE_MPH", _AVG_DRIVE_MPH)
+    factor = env_float("ROADTRIP_ROAD_DISTANCE_FACTOR", _ROAD_DISTANCE_FACTOR)
     legs: list[RouteLeg] = []
     for a, b in zip(waypoints, waypoints[1:]):
-        road = haversine_meters(a.lat, a.lng, b.lat, b.lng) * _ROAD_DISTANCE_FACTOR
+        road = haversine_meters(a.lat, a.lng, b.lat, b.lng) * factor
         legs.append(
             RouteLeg(
                 distance_meters=round(road, 1),
-                duration_seconds=round(_seconds_for(road), 0),
+                duration_seconds=round(_seconds_for(road, mph), 0),
             )
         )
     return RouteResult(

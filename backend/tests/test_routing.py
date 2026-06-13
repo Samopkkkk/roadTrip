@@ -32,6 +32,15 @@ def test_estimate_route_leg_count() -> None:
     )
 
 
+def test_route_estimate_is_env_tunable(monkeypatch) -> None:
+    base = estimate_route([_SF, _LA])
+    monkeypatch.setenv("ROADTRIP_ROAD_DISTANCE_FACTOR", "2.0")
+    monkeypatch.setenv("ROADTRIP_AVG_DRIVE_MPH", "30")
+    tuned = estimate_route([_SF, _LA])
+    assert tuned.distance_meters > base.distance_meters  # larger road factor
+    assert tuned.duration_seconds > base.duration_seconds  # slower + farther
+
+
 def test_compute_route_offline_uses_estimate() -> None:
     route = asyncio.run(compute_route([_SF, _LA]))
     assert route.source == "estimate"

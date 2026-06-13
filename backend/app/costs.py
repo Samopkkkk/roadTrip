@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
+from .config import env_float
 from .schemas import CostBreakdown, PlanStop, StopKind
 
 _EARTH_RADIUS_M = 6_371_008.8  # IUGG mean radius
@@ -66,34 +67,41 @@ def estimate_costs(
     party_size = max(1, int(party_size))
     days = max(1, int(days))
 
+    # Rates default to the constants above; deployments override via env vars.
+    mpg = env_float("ROADTRIP_AVG_MPG", _AVG_MPG)
+    gas = env_float("ROADTRIP_GAS_USD_PER_GALLON", _GAS_USD_PER_GALLON)
+    lodging_rate = env_float("ROADTRIP_LODGING_USD_PER_ROOM_NIGHT", _LODGING_USD_PER_ROOM_NIGHT)
+    food_rate = env_float("ROADTRIP_FOOD_USD_PER_PERSON_DAY", _FOOD_USD_PER_PERSON_DAY)
+    activity_rate = env_float("ROADTRIP_ACTIVITY_USD_PER_PERSON", _ACTIVITY_USD_PER_PERSON)
+
     road_meters = max(0.0, distance_meters)
     miles = road_meters / _METERS_PER_MILE
-    gallons = miles / _AVG_MPG
-    fuel = gallons * _GAS_USD_PER_GALLON
+    gallons = miles / mpg
+    fuel = gallons * gas
 
     lodging_nights = sum(1 for s in stops if s.kind is StopKind.lodging)
     if lodging_nights == 0:
         lodging_nights = max(days - 1, 0)
     rooms = max(1, math.ceil(party_size / _TRAVELERS_PER_ROOM))
-    lodging = lodging_nights * rooms * _LODGING_USD_PER_ROOM_NIGHT
+    lodging = lodging_nights * rooms * lodging_rate
 
-    food = days * party_size * _FOOD_USD_PER_PERSON_DAY
+    food = days * party_size * food_rate
 
     paid_stops = sum(1 for s in stops if s.kind in _PAID_STOP_KINDS)
-    activities = paid_stops * party_size * _ACTIVITY_USD_PER_PERSON
+    activities = paid_stops * party_size * activity_rate
 
     total = fuel + lodging + food + activities
     per_person = total / party_size
 
     assumptions = [
-        f"Fuel: ~{miles:,.0f} road miles at {_AVG_MPG:.0f} mpg, "
-        f"${_GAS_USD_PER_GALLON:.2f}/gal ({'round trip' if round_trip else 'one-way'}).",
+        f"Fuel: ~{miles:,.0f} road miles at {mpg:.0f} mpg, "
+        f"${gas:.2f}/gal ({'round trip' if round_trip else 'one-way'}).",
         f"Lodging: {lodging_nights} night(s) x {rooms} room(s) at "
-        f"${_LODGING_USD_PER_ROOM_NIGHT:.0f}/room.",
+        f"${lodging_rate:.0f}/room.",
         f"Food: {days} day(s) x {party_size} traveler(s) at "
-        f"${_FOOD_USD_PER_PERSON_DAY:.0f}/person/day.",
+        f"${food_rate:.0f}/person/day.",
         f"Activities: {paid_stops} paid stop(s) x {party_size} traveler(s) at "
-        f"${_ACTIVITY_USD_PER_PERSON:.0f}/person.",
+        f"${activity_rate:.0f}/person.",
     ]
 
     return CostBreakdown(

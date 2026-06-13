@@ -54,6 +54,22 @@ def test_single_day_trip_has_no_lodging() -> None:
     assert costs.lodging_usd == 0.0
 
 
+def test_cost_rates_are_env_overridable(monkeypatch) -> None:
+    base = estimate_costs(distance_meters=200_000.0, days=3, party_size=2, stops=[])
+    monkeypatch.setenv("ROADTRIP_GAS_USD_PER_GALLON", "10.00")
+    monkeypatch.setenv("ROADTRIP_FOOD_USD_PER_PERSON_DAY", "100")
+    bumped = estimate_costs(distance_meters=200_000.0, days=3, party_size=2, stops=[])
+    assert bumped.fuel_usd > base.fuel_usd
+    assert bumped.food_usd > base.food_usd
+    assert any("$10.00/gal" in a for a in bumped.assumptions)
+
+
+def test_invalid_rate_env_falls_back_to_default(monkeypatch) -> None:
+    monkeypatch.setenv("ROADTRIP_AVG_MPG", "not-a-number")
+    costs = estimate_costs(distance_meters=100_000.0, days=2, party_size=2, stops=[])
+    assert costs.fuel_usd > 0  # didn't crash; used the default mpg
+
+
 def test_round_trip_labels_assumption() -> None:
     one = estimate_costs(distance_meters=100_000.0, days=2, party_size=2, stops=[])
     rt = estimate_costs(

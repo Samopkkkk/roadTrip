@@ -106,6 +106,18 @@ non-root user, with a `/health` HEALTHCHECK. It honors `$PORT`, so it drops
 straight onto Fly.io, Render, Cloud Run, Railway, etc. `GET /` returns service
 metadata as a deploy sanity check.
 
+**Tunable via env** (no code change) — cost rates and routing assumptions:
+
+| Env var | Default | |
+|---|---|---|
+| `ROADTRIP_GAS_USD_PER_GALLON` | `3.50` | fuel price |
+| `ROADTRIP_AVG_MPG` | `27` | fuel economy |
+| `ROADTRIP_LODGING_USD_PER_ROOM_NIGHT` | `130` | nightly lodging |
+| `ROADTRIP_FOOD_USD_PER_PERSON_DAY` | `45` | food per person/day |
+| `ROADTRIP_ACTIVITY_USD_PER_PERSON` | `25` | per paid stop/person |
+| `ROADTRIP_AVG_DRIVE_MPH` | `55` | estimate drive speed |
+| `ROADTRIP_ROAD_DISTANCE_FACTOR` | `1.25` | great-circle → road multiplier |
+
 Then point the iOS/macOS app at the deployed URL via its **Settings** screen
 (default is `http://localhost:8000`).
 
