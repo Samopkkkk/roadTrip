@@ -1,0 +1,14 @@
+# Build context trimming — only backend/ is copied into the image.
+.git
+.github
+apple
+.claude
+**/__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+*.md
+backend/tests

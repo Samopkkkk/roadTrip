@@ -22,6 +22,19 @@ app = FastAPI(
 )
 
 
+@app.get("/", tags=["meta"])
+async def root() -> dict[str, str]:
+    """Service metadata — handy as a deploy sanity check."""
+
+    return {
+        "service": app.title,
+        "version": app.version,
+        "docs": "/docs",
+        "health": "/health",
+        "plan": "POST /plan",
+    }
+
+
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok"}

@@ -89,6 +89,26 @@ pip install -r backend/requirements.txt
 pytest                # runs from repo root; see pytest.ini
 ```
 
+## Deploy
+
+The API ships as a container (`backend/Dockerfile`). Build from the repo root and run:
+
+```bash
+docker build -f backend/Dockerfile -t roadtrip-api .
+docker run -p 8000:8000 \
+  -e ANTHROPIC_API_KEY=sk-...        \  # optional: enables the LLM planner
+  -e ROADTRIP_USE_OSRM=1             \  # optional: real road routing
+  roadtrip-api
+```
+
+The image runs `uvicorn backend.app.main:app` on `$PORT` (default 8000) as a
+non-root user, with a `/health` HEALTHCHECK. It honors `$PORT`, so it drops
+straight onto Fly.io, Render, Cloud Run, Railway, etc. `GET /` returns service
+metadata as a deploy sanity check.
+
+Then point the iOS/macOS app at the deployed URL via its **Settings** screen
+(default is `http://localhost:8000`).
+
 ## Distance & drive time
 
 `routing.py` turns the ordered stops into road distance, drive time, and a

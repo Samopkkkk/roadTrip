@@ -9,6 +9,14 @@ from backend.app.main import app
 client = TestClient(app)
 
 
+def test_root_returns_service_metadata() -> None:
+    resp = client.get("/")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["service"]
+    assert body["plan"] == "POST /plan"
+
+
 def test_health() -> None:
     resp = client.get("/health")
     assert resp.status_code == 200
