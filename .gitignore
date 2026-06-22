@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor
+.DS_Store
+
+# Xcode / Apple app (project is generated from apple/project.yml via XcodeGen)
+apple/RoadTrip.xcodeproj/
+apple/RoadTrip/Info.plist
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/

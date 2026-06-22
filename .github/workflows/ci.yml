@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run tests
+        run: pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f backend/Dockerfile -t roadtrip-api .
+      - name: Smoke-test the container
+        run: |
+          docker run -d -p 8000:8000 --name roadtrip roadtrip-api
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "${ready:-0}" != 1 ]; then echo "server never became healthy"; docker logs roadtrip; exit 1; fi
+          echo
+          curl -fsS http://localhost:8000/
+          echo
+          curl -fsS -X POST http://localhost:8000/plan \
+            -H 'content-type: application/json' \
+            -d '{"idea":"weekend near Lake Tahoe","days":2}' >/dev/null
+          docker rm -f roadtrip

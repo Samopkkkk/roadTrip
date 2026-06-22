@@ -10,10 +10,12 @@ distance math, cost math, and schema shape.
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
-from .costs import estimate_costs, haversine_meters
+from .costs import estimate_costs
 from .geocode import geocode
+from .routing import plan_route
 from .schemas import (
     Coordinate,
     CostBreakdown,
@@ -23,9 +25,6 @@ from .schemas import (
     StopKind,
 )
 
-_AVG_DRIVE_MPH = 55.0
-_METERS_PER_MILE = 1609.344
-
 
 async def plan_trip(req: PlanRequest) -> PlanResponse:
     origin_text, destination_text = _resolve_anchors(req)
@@ -33,28 +32,55 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
 
     origin_geo = await geocode(origin_text) if origin_text else None
     if origin_geo is None and origin_text:
-        warnings.append(f"Couldn't locate origin '{origin_text}', using fallback.")
-    if origin_geo is None:
-        origin_geo = _fallback_origin()
+        warnings.append(f"Couldn't locate origin '{origin_text}'.")
 
-    destination_geo = (
-        await geocode(destination_text) if destination_text else None
-    )
+    destination_geo = await geocode(destination_text) if destination_text else None
+    destination_resolved = destination_geo is not None
     if destination_geo is None and destination_text:
         warnings.append(
             f"Couldn't locate destination '{destination_text}', "
             "using direction hint instead."
         )
     if destination_geo is None:
-        destination_geo = _fallback_destination(origin_geo.coord, req)
+        provisional = origin_geo.coord if origin_geo else _fallback_origin().coord
+        destination_geo = _fallback_destination(provisional, req)
 
-    distance_meters = haversine_meters(
-        origin_geo.coord.lat,
-        origin_geo.coord.lng,
-        destination_geo.coord.lat,
-        destination_geo.coord.lng,
+    # `origin_assumed` is a request-level fact: did the traveler pin a start at
+    # all? It's True only when neither a field nor the idea named one (so it
+    # matches the LLM planner, which derives the same thing). A *given-but-
+    # unlocatable* origin is NOT assumed — the user told us where they start.
+    origin_assumed = origin_text is None
+
+    # When we have no origin coordinates (none given, or geocoding failed) and
+    # the trip isn't just wandering a direction, base it at the destination
+    # instead of the geographic centre of the map — the app supplies the real
+    # location to route there. Avoids absurd "1,800 km from Current location".
+    based_at = False
+    if origin_geo is None:
+        if req.direction is None and destination_resolved:
+            origin_geo = destination_geo  # frozen + immutable, safe to share
+            based_at = True
+            if origin_text is None:
+                warnings.append(
+                    f"No starting point given — planning around {destination_geo.name}. "
+                    "Add your origin to include the drive there."
+                )
+            else:
+                warnings.append(
+                    f"Planning around {destination_geo.name} — provide a locatable "
+                    "origin to include the drive there."
+                )
+        else:
+            origin_geo = _fallback_origin()
+            if origin_text is None:
+                warnings.append("No starting point given — using a placeholder location.")
+
+    route, legs = await plan_route(
+        [(origin_geo.name, origin_geo.coord), (destination_geo.name, destination_geo.coord)],
+        round_trip=req.round_trip,
     )
-    expected_travel_seconds = (distance_meters / _METERS_PER_MILE) / _AVG_DRIVE_MPH * 3600.0
+    distance_meters = route.distance_meters
+    expected_travel_seconds = route.duration_seconds
 
     stops = _build_stop_skeleton(
         req=req,
@@ -67,9 +93,10 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         days=req.days,
         party_size=req.party_size,
         stops=stops,
+        round_trip=req.round_trip,
     )
 
-    title = _build_title(origin_geo.name, destination_geo.name, req)
+    title = _build_title(origin_geo.name, destination_geo.name, req, based_at)
     summary = _build_summary(
         req=req,
         origin=origin_geo.name,
@@ -77,6 +104,7 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         distance_meters=distance_meters,
         stops=stops,
         costs=costs,
+        based_at=based_at,
     )
     tags = _build_tags(req)
 
@@ -91,8 +119,10 @@ async def plan_trip(req: PlanRequest) -> PlanResponse:
         distance_meters=round(distance_meters, 1),
         expected_travel_time_seconds=round(expected_travel_seconds, 0),
         stops=stops,
+        legs=legs,
         costs=costs,
         source="heuristic",
+        origin_assumed=origin_assumed,
         warnings=warnings,
     )
 
@@ -187,7 +217,7 @@ def _fallback_origin() -> "GeocodeResult":
 def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResult":
     from .geocode import GeocodeResult
 
-    dx, dy = _direction_offset(req.direction or req.idea)
+    dx, dy = _direction_offset(req.direction or req.idea, req.days, origin.lat)
     return GeocodeResult(
         name=(req.direction or "Open road").strip() or "Open road",
         coord=Coordinate(
@@ -197,19 +227,36 @@ def _fallback_destination(origin: Coordinate, req: PlanRequest) -> "GeocodeResul
     )
 
 
-def _direction_offset(hint: str) -> tuple[float, float]:
+_DIRECTION_MILES_PER_DAY = 180.0  # far-point reach for an open-ended wander
+_MILES_PER_DEG_LAT = 69.0
+
+
+def _direction_offset(hint: str, days: int, origin_lat: float) -> tuple[float, float]:
+    """Project a far-point offset ``(d_lng, d_lat)`` in degrees for a wander.
+
+    The reach scales with trip length so "head west for 5 days" covers real
+    ground instead of a token 4-degree hop. Longitude degrees are widened toward
+    the poles (they're physically shorter there) so the resulting mileage is
+    honest regardless of the origin's latitude.
+    """
+
     h = hint.lower()
+    reach_miles = max(1, days) * _DIRECTION_MILES_PER_DAY
+    deg_lat = reach_miles / _MILES_PER_DEG_LAT
+    cos_lat = max(0.2, math.cos(math.radians(origin_lat)))
+    deg_lng = reach_miles / (_MILES_PER_DEG_LAT * cos_lat)
+
     dx = dy = 0.0
     if "north" in h:
-        dy += 4.0
+        dy += deg_lat
     if "south" in h:
-        dy -= 4.0
+        dy -= deg_lat
     if "east" in h:
-        dx += 4.0
+        dx += deg_lng
     if "west" in h:
-        dx -= 4.0
+        dx -= deg_lng
     if dx == 0.0 and dy == 0.0:
-        dx = 3.0  # arbitrary easterly drift
+        dx = deg_lng  # no compass word found: drift east
     return dx, dy
 
 
@@ -296,7 +343,11 @@ def _build_stop_skeleton(
     return stops
 
 
-def _build_title(origin_name: str, destination_name: str, req: PlanRequest) -> str:
+def _build_title(
+    origin_name: str, destination_name: str, req: PlanRequest, based_at: bool = False
+) -> str:
+    if based_at:
+        return f"Explore {destination_name}"
     if req.destination or req.anchor_attraction:
         return f"{origin_name} → {destination_name}"
     if req.direction:
@@ -312,9 +363,16 @@ def _build_summary(
     distance_meters: float,
     stops: Iterable[PlanStop],
     costs: CostBreakdown,
+    based_at: bool = False,
 ) -> str:
-    km = distance_meters / 1000
     stop_count = sum(1 for _ in stops)
+    if based_at:
+        return (
+            f"A {req.days}-day trip exploring {destination} with {stop_count} "
+            f"suggested stops. Estimated total: ${costs.total_usd:,.0f} for "
+            f"{req.party_size} traveler(s) (excludes the drive to get there)."
+        )
+    km = distance_meters / 1000
     return (
         f"A {req.days}-day, ~{km:,.0f} km trip from {origin} to {destination} "
         f"with {stop_count} suggested stops. "
