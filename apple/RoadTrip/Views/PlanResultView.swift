@@ -165,7 +165,7 @@ private struct CostBreakdownView: View {
                     .padding(.top, 4)
                 }
                 .font(.caption)
-                .tint(.secondary)
+                .foregroundStyle(.secondary)
             }
         }
     }
